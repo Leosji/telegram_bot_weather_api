@@ -1,0 +1,158 @@
+from datetime import datetime
+import pytz
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
+import requests
+import random
+
+# Замените на ваши API ключи и данные
+WEATHER_API_KEY = "-"
+CITY_INFO = {
+    "Париж": {
+        "страна": "Франция",
+        "широта": 48.8566,
+        "долгота": 2.3522,
+        "площадь": "105.4 км²",
+        "население": "2,165,423",
+        "ссылка_на_фото": "https://avatars.mds.yandex.net/i?id=ecf153931bc4fe10f28039977fd1bea1_l-10805295-images-thumbs&n=13"
+    },
+    "Нью-Йорк": {
+        "страна": "США",
+        "широта": 40.7128,
+        "долгота": -74.0060,
+        "площадь": "783.8 км²",
+        "население": "8,336,817",
+        "ссылка_на_фото": "https://media.newyorker.com/photos/590972a5ebe912338a37746c/master/w_2560%2Cc_limit/Veix-Goodbye-New-York-Color.jpg"
+    },
+    "Токио": {
+        "страна": "Япония",
+        "широта": 35.6895,
+        "долгота": 139.6917,
+        "площадь": "2,194 км²",
+        "население": "13,960,236",
+        "ссылка_на_фото": "https://i.pinimg.com/originals/97/1a/4e/971a4e830d50f18d464d655366734605.jpg"
+    },
+    "Лондон": {
+        "страна": "Великобритания",
+        "широта": 51.5074,
+        "долгота": -0.1278,
+        "площадь": "1,572 км²",
+        "население": "8,982,000",
+        "ссылка_на_фото": "https://avatars.mds.yandex.net/i?id=93af8da62ddefb7f91c5fea2e2527d74_l-12627914-images-thumbs&n=13"
+    },
+    "Сидней": {
+        "страна": "Австралия",
+        "широта": -33.8688,
+        "долгота": 151.2093,
+        "площадь": "12,367.7 км²",
+        "население": "5,312,163",
+        "ссылка_на_фото": "https://avatars.mds.yandex.net/i?id=bc3860ab20bbc012bc6ef0c675b78164_l-10637407-images-thumbs&n=13"
+    }
+}
+ФРАЗЫ_НА_ФОТО = [
+    "Отличное фото! Где это?",
+    "Выглядит потрясающе!",
+    "Вау, какой вид!"
+]
+
+
+def получить_погоду(название_города):
+    данные_города = CITY_INFO.get(название_города)
+    if not данные_города:
+        return "Город не найден."
+
+    широта = данные_города["широта"]
+    долгота = данные_города["долгота"]
+    url = f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q={широта},{долгота}&aqi=no"
+
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        temp_c = data["current"]["temp_c"]
+        temp_f = data["current"]["temp_f"]
+        local_time_str = data["location"]["localtime"]  # Локальное время в строковом формате
+        local_timezone = data["location"]["tz_id"]  # Часовой пояс
+
+        # Преобразование времени в удобный формат
+        local_time = datetime.strptime(local_time_str, "%Y-%m-%d %H:%M")
+        timezone = pytz.timezone(local_timezone)
+        local_time = timezone.localize(local_time)
+
+        return (f"Погода в {название_города}:\n"
+                f"Дата и время: {local_time.strftime('%Y-%m-%d %H:%M')}\n"
+                f"Температура: {temp_c} °C / {temp_f} °F")
+    else:
+        return "Не удалось получить информацию о погоде."
+
+async def старт(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    имя_пользователя = update.effective_user.first_name
+    клавиатура = [
+        [InlineKeyboardButton("Справка о командах", callback_data="help_commands")],
+    ]
+    reply_markup = InlineKeyboardMarkup(клавиатура)
+    await update.message.reply_text(f"Привет, {имя_пользователя}! Добро пожаловать в бота \"Информер путешественника\".", reply_markup=reply_markup)
+
+async def прощание(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    имя_пользователя = update.effective_user.first_name
+    await update.message.reply_text(f"До свидания, {имя_пользователя}! Хорошего дня!")
+
+async def помощь(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    города = ", ".join(CITY_INFO.keys())
+    await update.message.reply_text(f"Вы можете получить информацию о следующих городах: {города}")
+
+async def информация_о_городе(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    название_города = update.message.text
+    данные_города = CITY_INFO.get(название_города)
+    if данные_города:
+        клавиатура = [
+            [InlineKeyboardButton("Справка", callback_data=f"info_{название_города}"),
+             InlineKeyboardButton("Фото", callback_data=f"photo_{название_города}"),
+             InlineKeyboardButton("Погода", callback_data=f"weather_{название_города}")]
+        ]
+        reply_markup = InlineKeyboardMarkup(клавиатура)
+        await update.message.reply_text(f"Что вы хотите узнать о {название_города}?", reply_markup=reply_markup)
+    else:
+        await update.message.reply_text("Город не найден. Попробуйте другой из списка /help.")
+
+async def обработка_кнопок(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "help_commands":
+        await query.message.reply_text("Доступные команды:\n/start - Начало работы\n/help - Список городов\nВведите название города для получения информации.")
+        return
+
+    data = query.data.split("_")
+    действие, название_города = data[0], data[1]
+    данные_города = CITY_INFO.get(название_города)
+
+    if действие == "info" and данные_города:
+        информация = (f"Город: {название_города}\n"
+                      f"Страна: {данные_города['страна']}\n"
+                      f"Широта: {данные_города['широта']}\n"
+                      f"Долгота: {данные_города['долгота']}\n"
+                      f"Площадь: {данные_города['площадь']}\n"
+                      f"Население: {данные_города['население']}")
+        await query.message.reply_text(информация)
+    elif действие == "photo" and данные_города:
+        ссылка_на_фото = данные_города["ссылка_на_фото"]
+        await query.message.reply_photo(photo=ссылка_на_фото)
+    elif действие == "weather":
+        информация_о_погоде = получить_погоду(название_города)
+        await query.message.reply_text(информация_о_погоде)
+async def обработка_фото(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    случайный_ответ = random.choice(ФРАЗЫ_НА_ФОТО)
+    await update.message.reply_text(случайный_ответ)
+
+# Настройка приложения
+app = ApplicationBuilder().token("7827298557:AAFzs-E79HFVNORb7MXZslG163eCyrPSmkk").build()
+app.add_handler(CommandHandler("start", старт))
+app.add_handler(CommandHandler("bye", прощание))
+app.add_handler(CommandHandler("help", помощь))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, информация_о_городе))
+app.add_handler(CallbackQueryHandler(обработка_кнопок))
+app.add_handler(MessageHandler(filters.PHOTO, обработка_фото))
+
+if __name__ == "__main__":
+    print("Бот запущен...")
+    app.run_polling()

@@ -145,7 +145,7 @@ async def обработка_фото(update: Update, context: ContextTypes.DEFA
     await update.message.reply_text(случайный_ответ)
 
 # Настройка приложения
-app = ApplicationBuilder().token("7827298557:AAFzs-E79HFVNORb7MXZslG163eCyrPSmkk").build()
+app = ApplicationBuilder().token("-").build()
 app.add_handler(CommandHandler("start", старт))
 app.add_handler(CommandHandler("bye", прощание))
 app.add_handler(CommandHandler("help", помощь))
